@@ -41,6 +41,7 @@ while cap.isOpened():
                         for ele in equality:
                             if cca[i, j] in ele:
                                 if cca[i, j-1] in ele:
+                                    temp = 0 
                                 else:
                                     ele.add(cca[i, j-1])
                             elif cca[i, j-1] in ele:
