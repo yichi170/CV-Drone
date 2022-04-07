@@ -6,6 +6,7 @@ import time
 import math
 from pyimagesearch.pid import PID
 import os
+import time
 
 filename = "out.xml"
 textColor = (0, 225, 225)
@@ -65,7 +66,7 @@ def clip_val(val):
         val = -max_speed_threshold
     return val
 
-def follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
+def follow(drone, tvec, rvec):
     z_update = tvec[0, 0, 2] - 100
     print("org_z: " + str(z_update))
     z_update = z_pid.update(z_update, sleep=0)
@@ -104,7 +105,20 @@ def follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
         print("left")
 
 def goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
-    pass
+    # global counter
+    # distance = tvec[0,0,2]
+    # if counter == 1000:
+    # elif counter > 0:
+    #     return
+    # elif counter == 0:
+    #     counter = 1
+    #     drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
+    # pass
+    start_t = time.time()
+    while time.time() < start_t + 10:
+        drone.send_rc_control(-10,0,0,0)
+    drone.send_rc_control(0,0,0,0)
+
 def main():
     
     drone = Tello()
@@ -134,6 +148,7 @@ def main():
     print("breakpoint3")
     
     drone.streamon()
+    global counter = 0
 
     while True:
         frame = drone.get_frame_read()
@@ -149,6 +164,9 @@ def main():
         if key != -1:
             keyboard(drone, key)
 
+        if counter > 0:
+            counter += 1
+
         if rvec is not None and tvec is not None:
             os.system('cls' if os.name == 'nt' else 'clear')
             print("Marker ID: ", markerIds)
@@ -156,9 +174,12 @@ def main():
             if markerIds == 0:
                 follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
             elif markerIds == 5:
-                goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
+                if tvec[0,0,2] > 100:
+                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
+                else:
+                    goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
             elif markerIds == 3:
-                goright(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
+                goright(drone, tvec, rvec)
 
             # drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
         else:
