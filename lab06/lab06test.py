@@ -116,7 +116,7 @@ def main():
         #     keyboard(drone, key)
 
         if rvec is not None and tvec is not None:
-            os.system('cls')
+            os.system('cls' if os.name == 'nt' else 'clear')
             # frame2 = cv2.aruco.drawAxis(frame2, intrinsic, distortion, rvec, tvec, 5)
             # frame2 = cv2.putText(frame2, 
             #         f'x: {tvec[0][0][0]:.2f} y: {tvec[0][0][1]:.2f} z: {tvec[0][0][2]:.2f}',
