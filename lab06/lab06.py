@@ -5,6 +5,7 @@ import numpy as np
 import time
 import math
 from pyimagesearch.pid import PID
+import os
 
 filename = "out.xml"
 textColor = (0, 225, 225)
@@ -63,6 +64,13 @@ def keyboard(drone, key):
 def control_drone(tvec):
     print("z-update: ", z_update)
 
+def clip_val(val):
+    if val > max_speed_threshold:
+        val = max_speed_threshold
+    elif val < -max_speed_threshold:
+        val = -max_speed_threshold
+    return val
+
 def main():
     
     drone = Tello()
@@ -79,24 +87,26 @@ def main():
     print("breakpoint2")
 
     z_pid = PID(kP=0.7, kI=0.0001, kD=0.1)
-    y_pid = PID(kP=0.7, kI=0.0001, kD=0.1)
+    y_pid = PID(kP=1.0, kI=0.0001, kD=0.1)
     yaw_pid = PID(kP=0.7, kI=0.0001, kD=0.1)
 
     yaw_pid.initialize()
     z_pid.initialize()
     y_pid.initialize()
 
+    dictionary = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_250)
+    parameters = cv2.aruco.DetectorParameters_create()
+
     print("breakpoint3")
+    
+    drone.streamon()
 
     while True:
-        drone.streamon()
         frame = drone.get_frame_read()
         # print("breakpoint4")
         frame = frame.frame
         frame2 = frame.copy()
 
-        dictionary = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_250)
-        parameters = cv2.aruco.DetectorParameters_create()
         markerConers, markerIds, rejectedCandidates = cv2.aruco.detectMarkers(frame2, dictionary, parameters=parameters)
         frame2 = cv2.aruco.drawDetectedMarkers(frame2, markerConers, markerIds)
         rvec, tvec, _objPoints = cv2.aruco.estimatePoseSingleMarkers(markerConers, 15, intrinsic, distortion)
@@ -110,37 +120,26 @@ def main():
             keyboard(drone, key)
 
         if rvec is not None and tvec is not None:
-            # frame2 = cv2.aruco.drawAxis(frame2, intrinsic, distortion, rvec, tvec, 5)
-            # frame2 = cv2.putText(frame2, 
-            #         f'x: {tvec[0][0][0]:.2f} y: {tvec[0][0][1]:.2f} z: {tvec[0][0][2]:.2f}',
-            #         (00, 185), font, fontScale, textColor, textthickness, cv2.LINE_AA, False)
-            
-            # control_drone(drone, tvec)
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print("Marker ID: ", markerIds)
 
             z_update = tvec[0, 0, 2] - 100
             print("org_z: " + str(z_update))
             z_update = z_pid.update(z_update, sleep=0)
             print("pid_z: " + str(z_update))
-            if z_update > max_speed_threshold:
-                z_update = max_speed_threshold
-            elif z_update < -max_speed_threshold:
-                z_update = -max_speed_threshold
+            z_update = clip_val(z_update)
             # drone.send_rc_control(0, int(z_update // 2), 0, 0)
 
             y_update = tvec[0, 0, 1] - 8
             print("org_y: " + str(y_update))
+            y_update = clip_val(y_update)
             y_update = y_pid.update(y_update, sleep=0) - 8
             print("pid_y: " + str(y_update))
-            if y_update > max_speed_threshold:
-                y_update = max_speed_threshold
-            elif y_update < -max_speed_threshold:
-                y_update = -max_speed_threshold
+            y_update = clip_val(y_update)
+            y_update *= 2.5
+            z_update *= 2
 
-            # drone.send_rc_control(0, int(z_update // 2), 0, 0)
-            drone.send_rc_control(0, 0, int(-y_update // 2), 0)
-
-
-            dst, jaco = cv2.Rodrigues(rvec)
+            dst, jaco = cv2.Rodrigues(rvec[0][0])
             z_ = np.array([dst[0][2], dst[1][2], dst[2][2]])
             v = np.array([z_[0], 0, z_[2]])
             degree = math.atan2(z_[2], z_[0])
@@ -152,7 +151,7 @@ def main():
             elif degree < -30:
                 degree = -30
             print("after degree: ", degree)
-            drone.send_rc_control(0, 0, 0, int(degree))
+            drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
             print("degree: ", degree)
             if int(degree) > 0:
                 print("right")
