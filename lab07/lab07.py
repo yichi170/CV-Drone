@@ -65,6 +65,46 @@ def clip_val(val):
         val = -max_speed_threshold
     return val
 
+def follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
+    z_update = tvec[0, 0, 2] - 100
+    print("org_z: " + str(z_update))
+    z_update = z_pid.update(z_update, sleep=0)
+    print("pid_z: " + str(z_update))
+    z_update = clip_val(z_update)
+    # drone.send_rc_control(0, int(z_update // 2), 0, 0)
+
+    y_update = tvec[0, 0, 1] - 8
+    print("org_y: " + str(y_update))
+    y_update = clip_val(y_update)
+    y_update = y_pid.update(y_update, sleep=0) - 8
+    print("pid_y: " + str(y_update))
+    y_update = clip_val(y_update)
+    y_update *= 2.5
+    z_update *= 1
+
+    dst, jaco = cv2.Rodrigues(rvec[0][0])
+    z_ = np.array([dst[0][2], dst[1][2], dst[2][2]])
+    v = np.array([z_[0], 0, z_[2]])
+    degree = math.atan2(z_[2], z_[0])
+    degree = -degree * 180 / math.pi
+    print("ori_degree: ", degree)
+    degree -= 85
+    if degree > 20:
+        degree = 20
+    elif degree < -20:
+        degree = -20
+    else:
+        degree = 0
+
+    print("after degree: ", degree)
+    drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
+    if int(degree) > 0:
+        print("right")
+    elif int(degree) < 0:
+        print("left")
+
+def goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
+    pass
 def main():
     
     drone = Tello()
@@ -112,49 +152,15 @@ def main():
         if rvec is not None and tvec is not None:
             os.system('cls' if os.name == 'nt' else 'clear')
             print("Marker ID: ", markerIds)
-
-            z_update = tvec[0, 0, 2] - 100
-            print("org_z: " + str(z_update))
-            z_update = z_pid.update(z_update, sleep=0)
-            print("pid_z: " + str(z_update))
-            z_update = clip_val(z_update)
-
-            y_update = tvec[0, 0, 1] - 8
-            print("org_y: " + str(y_update))
-            y_update = clip_val(y_update)
-            y_update = y_pid.update(y_update, sleep=0) - 8
-            print("pid_y: " + str(y_update))
-            y_update = clip_val(y_update)
             
-            x_update = tvec[0, 0, 0] - 8
-            print("org_x: " + str(x_update))
-            x_update = clip_val(x_update)
-            x_update = x_pid.update(x_update, sleep=0) - 8
-            print("pid_y: " + str(x_update))
-            x_update = clip_val(x_update)
-            
-            y_update *= 2.5
-            z_update *= 1.5
+            if markerIds == 0:
+                follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
+            elif markerIds == 5:
+                goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
+            elif markerIds == 3:
+                goright(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
 
-            dst, jaco = cv2.Rodrigues(rvec[0][0])
-            z_ = np.array([dst[0][2], dst[1][2], dst[2][2]])
-            v = np.array([z_[0], 0, z_[2]])
-            degree = math.atan2(z_[2], z_[0])
-            degree = -degree * 180 / math.pi
-            print("ori_degree: ", degree)
-            degree -= 85
-            if degree > 30:
-                degree = 30
-            elif degree < -30:
-                degree = -30
-            print("after degree: ", degree)
-            print("degree: ", degree)
-            if int(degree) > 0:
-                print("right")
-            elif int(degree) < 0:
-                print("left")
-
-            drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
+            # drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
         else:
             drone.send_rc_control(0, 0, 0, 0)
 
