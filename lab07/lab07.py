@@ -8,7 +8,7 @@ from pyimagesearch.pid import PID
 import os
 import time
 
-filename = "out.xml"
+filename = "out-2.xml"
 textColor = (0, 225, 225)
 textthickness = 2
 font = cv2.FONT_HERSHEY_SIMPLEX
@@ -16,12 +16,14 @@ fontScale = 1
 max_speed_threshold = 40
 
 def keyboard(drone, key):
+    global state
     print("key:", key)
     fb_speed = 40
     lf_speed = 40
     ud_speed = 50
     degree = 30
     if key == ord('1'):
+        state = 0
         drone.takeoff()
     if key == ord('2'):
         drone.land()
@@ -66,8 +68,9 @@ def clip_val(val):
         val = -max_speed_threshold
     return val
 
-def follow(drone, tvec, rvec):
-    z_update = tvec[0, 0, 2] - 100
+def follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, distance):
+    print("follow ----------------------------")
+    z_update = tvec[0, 0, 2] - distance
     print("org_z: " + str(z_update))
     z_update = z_pid.update(z_update, sleep=0)
     print("pid_z: " + str(z_update))
@@ -90,9 +93,9 @@ def follow(drone, tvec, rvec):
     degree = -degree * 180 / math.pi
     print("ori_degree: ", degree)
     degree -= 85
-    if degree > 20:
+    if degree > 25:
         degree = 20
-    elif degree < -20:
+    elif degree < -25:
         degree = -20
     else:
         degree = 0
@@ -104,7 +107,9 @@ def follow(drone, tvec, rvec):
     elif int(degree) < 0:
         print("left")
 
-def goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
+# def goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
+def goleft(drone):
+    print("Go Left ----------------------------")
     # global counter
     # distance = tvec[0,0,2]
     # if counter == 1000:
@@ -114,10 +119,31 @@ def goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
     #     counter = 1
     #     drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
     # pass
-    start_t = time.time()
-    while time.time() < start_t + 10:
-        drone.send_rc_control(-10,0,0,0)
+    # start_t = time.time()
+    # while time.time() < start_t + 10:
+    drone.send_rc_control(-20,0,0,0)
+    time.sleep(3)
     drone.send_rc_control(0,0,0,0)
+
+def goright(drone):
+    print("Go Right ----------------------------")
+    drone.send_rc_control(20,0,0,0)
+    time.sleep(3)
+    drone.send_rc_control(0,0,0,0)
+
+def godown(drone):
+    print("Go Down ----------------------------")
+    drone.send_rc_control(0,0,-50,0)
+    time.sleep(3)
+    drone.send_rc_control(0,0,0,0)
+    # go(drone)
+def go(drone):
+    print("Go ----------------------------")
+    drone.send_rc_control(0,50,0,0)
+    time.sleep(5)
+    drone.send_rc_control(0,0,0,0)
+
+state = -1
 
 def main():
     
@@ -148,13 +174,11 @@ def main():
     print("breakpoint3")
     
     drone.streamon()
-    global counter = 0
 
     while True:
         frame = drone.get_frame_read()
         frame = frame.frame
         frame2 = frame.copy()
-
         markerConers, markerIds, rejectedCandidates = cv2.aruco.detectMarkers(frame2, dictionary, parameters=parameters)
         frame2 = cv2.aruco.drawDetectedMarkers(frame2, markerConers, markerIds)
         rvec, tvec, _objPoints = cv2.aruco.estimatePoseSingleMarkers(markerConers, 15, intrinsic, distortion)
@@ -164,35 +188,62 @@ def main():
         if key != -1:
             keyboard(drone, key)
 
-        if counter > 0:
-            counter += 1
-
         if rvec is not None and tvec is not None:
             os.system('cls' if os.name == 'nt' else 'clear')
             print("Marker ID: ", markerIds)
-            
-            if markerIds == 0:
-                follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
-            elif markerIds == 5:
-                if tvec[0,0,2] > 100:
-                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
+            markerID = np.amin(markerIds)
+               
+            if markerID == 0:
+                follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
+            elif markerID == 5:
+                print("==== markerID: 5 ====")
+                if tvec[0,0,2] > 60:
+                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
                 else:
-                    goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid)
-            elif markerIds == 3:
-                goright(drone, tvec, rvec)
+                    print(tvec)
+                    goleft(drone)
+                    yaw_pid.initialize()
+                    z_pid.initialize()
+                    y_pid.initialize()
+
+            elif markerID == 3:
+                print("==== markerID: 3 ====")
+                if tvec[0,0,2] > 60:
+                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
+                else:
+                    goright(drone)
+                    yaw_pid.initialize()
+                    z_pid.initialize()
+                    y_pid.initialize()
+            
+            elif markerID == 1:
+                if tvec[0, 0, 2] > 60:
+                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
+                else:
+                    godown(drone)
+                    go(drone)
+            
+            elif markerID == 4:
+                if tvec[0, 0, 2] > 60:
+                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
+                else:
+                    drone.land()
 
             # drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
         else:
             drone.send_rc_control(0, 0, 0, 0)
+            os.system('cls' if os.name == 'nt' else 'clear')
+
+
 
         cv2.imshow("drone", frame2) 
         key = cv2.waitKey(33)
+
 
         if key != -1:
             keyboard(drone, key)
 
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     main()
