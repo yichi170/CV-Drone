@@ -17,6 +17,7 @@ max_speed_threshold = 40
 
 def keyboard(drone, key):
     global state
+    global take_off
     print("key:", key)
     fb_speed = 40
     lf_speed = 40
@@ -25,6 +26,7 @@ def keyboard(drone, key):
     if key == ord('1'):
         state = 0
         drone.takeoff()
+        take_off = True
     if key == ord('2'):
         drone.land()
     if key == ord('3'):
@@ -68,7 +70,7 @@ def clip_val(val):
         val = -max_speed_threshold
     return val
 
-def follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, distance):
+def follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, distance, scale = 1):
     print("follow ----------------------------")
     z_update = tvec[0, 0, 2] - distance
     print("org_z: " + str(z_update))
@@ -94,59 +96,69 @@ def follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, distance):
     print("ori_degree: ", degree)
     degree -= 85
     if degree > 25:
-        degree = 20
+        degree = 23
     elif degree < -25:
-        degree = -20
+        degree = -23
     else:
         degree = 0
 
     print("after degree: ", degree)
-    drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
+    drone.send_rc_control(0, int(z_update // 2) * scale, int(-y_update // 2), int(degree))
     if int(degree) > 0:
         print("right")
     elif int(degree) < 0:
         print("left")
 
 # def goleft(drone, tvec, rvec, z_pid, y_pid, yaw_pid):
-def goleft(drone):
+def goleft(drone, speed, dtime):
     print("Go Left ----------------------------")
-    # global counter
-    # distance = tvec[0,0,2]
-    # if counter == 1000:
-    # elif counter > 0:
-    #     return
-    # elif counter == 0:
-    #     counter = 1
-    #     drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
-    # pass
-    # start_t = time.time()
-    # while time.time() < start_t + 10:
-    drone.send_rc_control(-20,0,0,0)
-    time.sleep(3)
+    drone.send_rc_control(-speed,0,0,0)
+    time.sleep(dtime)
     drone.send_rc_control(0,0,0,0)
 
-def goright(drone):
+def goright(drone, speed, dtime):
     print("Go Right ----------------------------")
-    drone.send_rc_control(20,0,0,0)
-    time.sleep(3)
-    drone.send_rc_control(0,0,0,0)
+    drone.send_rc_control(speed,0,0,0)
+    time.sleep(dtime)
+    # drone.send_rc_control(0,0,0,0)
 
-def godown(drone):
+def goup(drone, speed, dtime):
+    print("Go Up ------------------------------")
+    drone.send_rc_control(0, 0, speed, 0)
+    time.sleep(dtime)
+    # drone.send_rc_control(0, 0, 0, 0)
+
+def godown(drone, speed, dtime):
     print("Go Down ----------------------------")
-    drone.send_rc_control(0,0,-50,0)
-    time.sleep(3)
-    drone.send_rc_control(0,0,0,0)
-    # go(drone)
-def go(drone):
+    drone.send_rc_control(0,0,-speed,0)
+    time.sleep(dtime)
+    # drone.send_rc_control(0,0,0,0)
+
+def go(drone, speed, dtime):
     print("Go ----------------------------")
-    drone.send_rc_control(0,50,0,0)
-    time.sleep(5)
-    drone.send_rc_control(0,0,0,0)
+    drone.send_rc_control(0,speed,0,0)
+    time.sleep(dtime)
+    # drone.send_rc_control(0,0,0,0)
+
+def getmarkerID(markerIds):
+    if 0 in markerIds and 5 in markerIds and 3 in markerIds:
+        return 0
+    elif 0 in markerIds and 5 in markerIds:
+        return 0
+    elif 5 in markerIds and 3 in markerIds:
+        return 5
+    elif 0 in  markerIds and 3 in markerIds:
+        return 0
+    else:
+        return np.amin(markerIds)
+
 
 state = -1
 
 def main():
-    
+    global take_off
+
+    state = -1
     drone = Tello()
     drone.connect()
 
@@ -175,6 +187,10 @@ def main():
     
     drone.streamon()
 
+    gone = False
+    look_three = False
+    print(drone.get_battery())
+
     while True:
         frame = drone.get_frame_read()
         frame = frame.frame
@@ -190,47 +206,76 @@ def main():
 
         if rvec is not None and tvec is not None:
             os.system('cls' if os.name == 'nt' else 'clear')
-            print("Marker ID: ", markerIds)
-            markerID = np.amin(markerIds)
+            # print("Marker ID: ", markerIds)
+            markerID = getmarkerID(markerIds)
+            print(f"Marker ID: {markerID}")
+            # markerID = np.amin(markerIds)
                
             if markerID == 0:
-                follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
+                follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50, 2)
+                state = 0
             elif markerID == 5:
+                state = 5
                 print("==== markerID: 5 ====")
                 if tvec[0,0,2] > 60:
                     follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
                 else:
                     print(tvec)
-                    goleft(drone)
+                    goleft(drone, 30, 2.1)
                     yaw_pid.initialize()
                     z_pid.initialize()
                     y_pid.initialize()
 
             elif markerID == 3:
+                state = 3
                 print("==== markerID: 3 ====")
                 if tvec[0,0,2] > 60:
-                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
+                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 40)
                 else:
-                    goright(drone)
+                    goright(drone, 30, 2.5)
+                    # go(drone, 40, 2)
+                    # drone.send_rc_control(0, 0, 0, -50)
+                    # time.sleep(1)
+                    look_three = True
                     yaw_pid.initialize()
                     z_pid.initialize()
                     y_pid.initialize()
             
             elif markerID == 1:
-                if tvec[0, 0, 2] > 60:
-                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
+                state = 1
+                if tvec[0, 0, 2] > 55:
+                    if take_off and not gone:
+                        go(drone, 40, 3)
+                        gone = True
+                    follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 40, 2)
                 else:
-                    godown(drone)
-                    go(drone)
+                    godown(drone, 50, 2)
+                    go(drone, 90, 2)
+                    goup(drone, 80, 0.7)
+                    drone.send_rc_control(0, 0, 0, 0)
+                    # go(drone, 100, 3)
             
             elif markerID == 4:
-                if tvec[0, 0, 2] > 60:
+                state = 4
+                if tvec[0, 0, 2] > 60 and tvec[0, 0, 2] < 10:
                     follow(drone, tvec, rvec, z_pid, y_pid, yaw_pid, 50)
                 else:
                     drone.land()
 
             # drone.send_rc_control(0, int(z_update // 2), int(-y_update // 2), int(degree))
         else:
+            if look_three:
+                go(drone, 40, 2)
+                drone.send_rc_control(0, 0, 0, -50)
+                time.sleep(1)
+                # goright(drone, 40, 0.8)
+                look_three = False
+            # if state == 1:
+            #     go(drone)
+            # if state == 5 or state == 3:
+            #     drone.send_rc_control(50, 0, 0, 0)
+            #     sleep(1)
+            #     drone.send_rc_control(0, 0, 0, 0)
             drone.send_rc_control(0, 0, 0, 0)
             os.system('cls' if os.name == 'nt' else 'clear')
 
